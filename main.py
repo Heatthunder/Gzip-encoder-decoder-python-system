@@ -182,6 +182,12 @@ def main():
     info_parser = subparsers.add_parser('info', help='Print metadata and integrity info for a .json.gz file.')
     info_parser.add_argument('file', type=Path, help='The .json.gz file to inspect.')
 
+    # IDE debug sessions often start scripts without CLI args.
+    # Print help and exit cleanly instead of raising argparse SystemExit(2).
+    if len(sys.argv) == 1:
+        parser.print_help()
+        return 0
+
     args = parser.parse_args()
 
     # Route commands

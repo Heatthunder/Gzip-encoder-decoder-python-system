@@ -35,6 +35,8 @@ python --version
 python3 main.py -h
 ```
 
+If you run from an IDE debugger, make sure you pass command arguments (for example: `pack your_save.json -o your_save.json.gz`).
+
 ## Quick start (first time with your game save)
 
 If your game already creates a `.json.gz` save, inspect it directly:
@@ -116,3 +118,4 @@ info      Print metadata and integrity info
 - **"Error: Input JSON invalid"**: fix JSON syntax first (missing commas, bad quotes, etc.).
 - **"Error: File not found"**: double-check the path and run command from the correct folder.
 - **Windows path issues**: wrap paths with spaces in double quotes (for example: `python main.py pack "my save.json" -o "my save.json.gz"`).
+- **`SystemExit: 2` / `the following arguments are required: command`**: the script was started without a subcommand. Add one of: `extract`, `pack`, `backup`, `roundtrip`, `info`.
