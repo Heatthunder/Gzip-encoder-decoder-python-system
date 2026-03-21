@@ -115,3 +115,4 @@ info      Print metadata and integrity info
 - **"python3: command not found"**: try `python` instead.
 - **"Error: Input JSON invalid"**: fix JSON syntax first (missing commas, bad quotes, etc.).
 - **"Error: File not found"**: double-check the path and run command from the correct folder.
+- **Windows path issues**: wrap paths with spaces in double quotes (for example: `python main.py pack "my save.json" -o "my save.json.gz"`).
