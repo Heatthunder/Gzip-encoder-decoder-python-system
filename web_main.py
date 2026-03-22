@@ -29,22 +29,12 @@ def set_status(message: str, is_error: bool = False) -> None:
 
 def _infer_json_filename(upload_name: str) -> str:
     """Map uploaded filename to a stable JSON name for gzip header metadata."""
-    if upload_name.lower().endswith(".gz"):
+    lowered = upload_name.lower()
+    if lowered.endswith(".gz"):
         return f"{upload_name[:-3]}.json"
+    if lowered.endswith(".gzip"):
+        return f"{upload_name[:-5]}.json"
     return "save.json"
-
-
-def _is_base64_payload(text: str) -> bool:
-    """Best-effort check for pasted/dropped Base64 content."""
-    candidate = "".join(text.split())
-    if not candidate:
-        return False
-    try:
-        decoded = base64.b64decode(candidate, validate=True)
-        # Require non-empty bytes to avoid false positives.
-        return bool(decoded)
-    except Exception:
-        return False
 
 
 def _load_json_text(json_text: str, source_label: str) -> None:
@@ -92,12 +82,18 @@ def _handle_dropped_text(raw_text: str, source_label: str = "text drop") -> None
         set_status("Dropped text is empty.", is_error=True)
         return
 
-    if not _is_base64_payload(text):
+    candidate = "".join(text.split())
+    try:
+        gz_bytes = base64.b64decode(candidate, validate=True)
+    except Exception:
+        set_status("Dropped text is not valid Base64.", is_error=True)
+        return
+
+    if not gz_bytes:
         set_status("Dropped text is not valid Base64.", is_error=True)
         return
 
     set_status("Detected text payload: Base64 (decode path)")
-    gz_bytes = base64.b64decode("".join(text.split()))
     _load_gzip_bytes(gz_bytes, source_label)
 
 
@@ -171,24 +167,36 @@ def _register_drag_and_drop() -> None:
             dropzone_el.classList.remove("is-active")
 
     async def _on_drop_async(event):
-        _prevent_default(event)
-        drag_counter["count"] = 0
-        dropzone_el.classList.remove("is-active")
+        try:
+            _prevent_default(event)
+            drag_counter["count"] = 0
+            dropzone_el.classList.remove("is-active")
 
-        dt = event.dataTransfer
-        files = dt.files if dt else None
-        if files and files.length > 0:
-            await _handle_dropped_file(files.item(0))
-            return
+            dt = event.dataTransfer
+            files = dt.files if dt else None
+            if files and files.length > 0:
+                await _handle_dropped_file(files.item(0))
+                return
 
-        dropped_text = dt.getData("text/plain") if dt else ""
-        _handle_dropped_text(dropped_text)
+            dropped_text = dt.getData("text/plain") if dt else ""
+            _handle_dropped_text(dropped_text)
+        except Exception as exc:
+            set_status(f"Failed to process drop input: {exc}", is_error=True)
 
     def _on_drop(event):
         asyncio.create_task(_on_drop_async(event))
 
     def _on_paste(event):
-        pasted_text = event.clipboardData.getData("text/plain")
+        # Limit decode side-effects to intentional paste inside the dropzone.
+        target = event.target
+        if target != dropzone_el and not dropzone_el.contains(target):
+            return
+
+        clipboard = event.clipboardData
+        if not clipboard:
+            return
+
+        pasted_text = clipboard.getData("text/plain")
         if pasted_text and pasted_text.strip():
             try:
                 _handle_dropped_text(pasted_text, source_label="pasted text")
