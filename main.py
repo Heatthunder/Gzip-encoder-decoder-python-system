@@ -69,23 +69,23 @@ def pack(
     # Minify into bytes
     packed = json.dumps(obj, separators=(',', ':'), ensure_ascii=False).encode('utf-8')
 
-    # Atomic write: create a temp filename in destination directory, write gzip to that
-    # filename directly, then replace target file in a single operation.
+    # Atomic write: write to a temp file in the destination directory, then replace.
+    # NamedTemporaryFile with delete=False keeps Windows compatibility for reopen/replace.
     temp_file: Path | None = None
     try:
-        temp_fd, temp_name = tempfile.mkstemp(
+        with tempfile.NamedTemporaryFile(
+            mode='wb',
+            delete=False,
             dir=out_gz.parent,
             prefix="tmp_pack_",
             suffix=".gz",
-        )
-        os.close(temp_fd)
-        temp_file = Path(temp_name)
-
-        with gzip.GzipFile(filename=temp_file, mode='wb', compresslevel=compresslevel, mtime=mtime) as f:
-            f.write(packed)
-
-        if not temp_file.exists():
-            raise RuntimeError(f"Temporary gzip file disappeared before replace: {temp_file}")
+        ) as tmp_file:
+            temp_file = Path(tmp_file.name)
+            with gzip.GzipFile(fileobj=tmp_file, mode='wb', compresslevel=compresslevel, mtime=mtime) as f:
+                f.write(packed)
+            # Flush buffers so replace sees fully-written bytes.
+            tmp_file.flush()
+            os.fsync(tmp_file.fileno())
         os.replace(temp_file, out_gz)
     finally:
         # Cleanup in case os.replace failed
