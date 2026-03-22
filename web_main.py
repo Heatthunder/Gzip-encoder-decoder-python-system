@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import io
-
 from js import Blob, Uint8Array, URL, document as js_document
 from pyodide.ffi import to_js
 from pyscript import document, when
@@ -26,6 +24,8 @@ def _infer_json_filename(upload_name: str) -> str:
     """Map uploaded filename to a stable JSON name for gzip header metadata."""
     if upload_name.lower().endswith(".gz"):
         return f"{upload_name[:-3]}.json"
+    if upload_name.lower().endswith(".gzip"):
+        return f"{upload_name[:-5]}.json"
     return "save.json"
 
 
@@ -52,8 +52,7 @@ async def on_file_selected(event):
         gz_bytes = bytes(Uint8Array.new(buffer).to_py())
 
         # Keep browser-side file work in-memory; core logic remains pure.
-        with io.BytesIO(gz_bytes) as _stream:
-            json_text = extract_logic(_stream.getvalue())
+        json_text = extract_logic(gz_bytes)
 
         editor_el.value = json_text
         set_status(f"Loaded: {file_obj.name}")
