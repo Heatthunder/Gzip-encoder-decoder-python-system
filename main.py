@@ -9,11 +9,14 @@ import os
 import tempfile
 import argparse
 import hashlib
+import logging
 import sys
 from contextlib import suppress
 from pathlib import Path
 from shutil import copy2
 from time import time
+
+logger = logging.getLogger(__name__)
 
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
@@ -156,10 +159,10 @@ def pack(
     # Ensure destination directory exists so temp/atomic writes work reliably.
     out_gz.parent.mkdir(parents=True, exist_ok=True)
     if not _dir_is_writable(out_gz.parent):
-        print(
-            f"Warning: Destination directory may be protected/unwritable: {out_gz.parent}. "
+        logger.warning(
+            "Destination directory may be protected/unwritable: %s. "
             "Pack may fail due to antivirus or Controlled Folder Access restrictions.",
-            file=sys.stderr,
+            out_gz.parent,
         )
 
     # Read JSON and validate before doing any compression work

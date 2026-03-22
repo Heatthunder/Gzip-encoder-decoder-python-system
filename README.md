@@ -111,6 +111,7 @@ info      Print metadata and integrity info
 - Use `--mtime 0` while packing for reproducible gzip output.
 - `extract` uses the embedded gzip original filename when available, but sanitizes it and falls back to the `.gz`-stripped name when unsafe.
 - Embedded filenames are read from the **first gzip member** only (concatenated multi-member `.gz` files are not fully scanned for naming metadata).
+- Filename rules can vary across filesystems; when embedded metadata is unsafe for the current platform, extraction falls back to the `.gz`-stripped filename.
 - If byte-for-byte output differs after repacking, use `roundtrip` to confirm the JSON data still matches.
 - Keep an untouched original save in a separate folder so you can recover quickly if an edit breaks loading.
 
