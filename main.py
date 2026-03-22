@@ -54,14 +54,31 @@ def _gzip_original_filename(gz_path: Path) -> str | None:
 
     return None
 
+
+
+def _default_extract_path(gz_path: Path, embedded_name: str | None) -> Path:
+    """Resolve a safe default extraction path from gzip metadata."""
+    fallback = gz_path.with_suffix('')
+    if not embedded_name:
+        return fallback
+
+    # Normalize Windows and POSIX separators, then keep basename only.
+    basename = embedded_name.replace('\\', '/').split('/')[-1].strip()
+
+    # Ignore unusable names (empty or path-like dot entries).
+    if basename in {"", ".", ".."}:
+        return fallback
+
+    try:
+        return gz_path.with_name(basename)
+    except ValueError:
+        # Defensive fallback for any unsupported filename edge cases.
+        return fallback
+
 def extract(gz_path: Path, out_path: Path | None = None, pretty: bool = True) -> Path:
     if out_path is None:
         embedded_name = _gzip_original_filename(gz_path)
-        if embedded_name:
-            # Do not allow archive metadata to create nested output folders.
-            out_path = gz_path.with_name(Path(embedded_name).name)
-        else:
-            out_path = gz_path.with_suffix('')  # remove .gz
+        out_path = _default_extract_path(gz_path, embedded_name)
 
     # Read as text stream
     with gzip.open(gz_path, 'rt', encoding='utf-8') as f:
