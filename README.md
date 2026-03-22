@@ -98,9 +98,8 @@ python3 main.py pack file.json -o file.json.gz --level 9 --mtime 0
 - **CLI**: `pack` supports `--mtime` and defaults to `0`, so repeated packing of
   the same JSON produces stable gzip timestamps. Passing `--mtime 0` explicitly
   is recommended for clarity in scripts/CI.
-- **Web (PyScript UI)**: JSON repacking uses the same deterministic packing
-  behavior with `mtime=0`, including any future Base64-from-JSON export path
-  that routes through the shared web packing helper.
+- **Web (PyScript UI)**: JSON repacking uses deterministic packing with
+  `mtime=0` for JSON→gzip and JSON→Base64 flows.
 
 ### Verify roundtrip integrity
 
