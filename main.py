@@ -9,10 +9,14 @@ import os
 import tempfile
 import argparse
 import hashlib
+import logging
 import sys
+from contextlib import suppress
 from pathlib import Path
 from shutil import copy2
 from time import time
+
+logger = logging.getLogger(__name__)
 
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
@@ -22,9 +26,105 @@ def _sha256(path: Path) -> str:
             digest.update(chunk)
     return digest.hexdigest()
 
+
+def _gzip_original_filename(gz_path: Path) -> str | None:
+    """Return the embedded gzip original filename from the first gzip member."""
+    with gz_path.open("rb") as f:
+        header = f.read(10)
+        if len(header) < 10 or header[0:2] != b"\x1f\x8b":
+            return None
+
+        # This inspects only the first gzip member header by design.
+        flags = header[3]
+
+        # Skip optional extra field.
+        if flags & 0x04:
+            xlen_bytes = f.read(2)
+            if len(xlen_bytes) < 2:
+                return None
+            xlen = int.from_bytes(xlen_bytes, "little")
+            f.read(xlen)
+
+        # Read optional embedded original filename from the gzip header.
+        if flags & 0x08:
+            name_bytes = bytearray()
+            while True:
+                b = f.read(1)
+                if not b or b == b"\x00":
+                    break
+                name_bytes.extend(b)
+            if name_bytes:
+                try:
+                    return name_bytes.decode("utf-8")
+                except UnicodeDecodeError:
+                    # Latin-1 fallback keeps compatibility with legacy producers.
+                    # If exact header-byte round-trip is ever required, preserve name_bytes.
+                    return name_bytes.decode("latin-1")
+
+    return None
+
+
+def _dir_is_writable(directory: Path) -> bool:
+    """Best-effort writable check used for clearer pack() warnings."""
+    probe: Path | None = None
+    try:
+        fd, name = tempfile.mkstemp(dir=directory, prefix=".write_probe_")
+        os.close(fd)
+        probe = Path(name)
+        return True
+    except OSError:
+        return False
+    finally:
+        if probe is not None:
+            with suppress(FileNotFoundError):
+                probe.unlink()
+
+
+def _is_windows_reserved_name(name: str) -> bool:
+    """Return True for Windows reserved device names."""
+    stem = name.split('.')[0].upper()
+    reserved = {
+        "CON", "PRN", "AUX", "NUL",
+        "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+        "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+    }
+    return stem in reserved
+
+
+def _default_extract_path(gz_path: Path, embedded_name: str | None) -> Path:
+    """Resolve a safe default extraction path from gzip metadata."""
+    fallback = gz_path.with_suffix('')
+    if not embedded_name:
+        return fallback
+
+    # Normalize Windows and POSIX separators, then keep basename only.
+    basename = embedded_name.replace('\\', '/').split('/')[-1]
+
+    # Ignore unusable names (empty/dot entries or control/NUL characters).
+    if basename in {"", ".", ".."}:
+        return fallback
+    if any(ord(ch) < 0x20 or ch == "\x00" for ch in basename):
+        return fallback
+
+    if sys.platform.startswith("win"):
+        # Windows rejects these characters and has reserved device names.
+        if any(ch in set('<>:"/\\|?*') for ch in basename):
+            return fallback
+        if basename.endswith((" ", ".")):
+            return fallback
+        if _is_windows_reserved_name(basename):
+            return fallback
+
+    try:
+        return gz_path.with_name(basename)
+    except ValueError:
+        # Defensive fallback for any unsupported filename edge cases.
+        return fallback
+
 def extract(gz_path: Path, out_path: Path | None = None, pretty: bool = True) -> Path:
     if out_path is None:
-        out_path = gz_path.with_suffix('')  # remove .gz
+        embedded_name = _gzip_original_filename(gz_path)
+        out_path = _default_extract_path(gz_path, embedded_name)
 
     # Read as text stream
     with gzip.open(gz_path, 'rt', encoding='utf-8') as f:
@@ -58,6 +158,12 @@ def pack(
         raise ValueError("compresslevel must be between 0 and 9")
     # Ensure destination directory exists so temp/atomic writes work reliably.
     out_gz.parent.mkdir(parents=True, exist_ok=True)
+    if not _dir_is_writable(out_gz.parent):
+        logger.warning(
+            "Destination directory may be protected/unwritable: %s. "
+            "Pack may fail due to antivirus or Controlled Folder Access restrictions.",
+            out_gz.parent,
+        )
 
     # Read JSON and validate before doing any compression work
     text = json_path.read_text(encoding='utf-8')
@@ -81,7 +187,13 @@ def pack(
         # Open the raw file and write gzip data through it so we can flush+fsync the raw fd.
         # Passing a raw file object as fileobj avoids handle/locking issues on Windows.
         with open(name, "wb") as raw:
-            with gzip.GzipFile(fileobj=raw, mode="wb", compresslevel=compresslevel, mtime=mtime) as gz:
+            with gzip.GzipFile(
+                fileobj=raw,
+                mode="wb",
+                filename=json_path.name,
+                compresslevel=compresslevel,
+                mtime=mtime,
+            ) as gz:
                 gz.write(packed)
             # Ensure all data is flushed to disk before replacing the target file.
             raw.flush()
@@ -94,12 +206,10 @@ def pack(
         # Atomic replace (same directory ensures atomicity on most platforms).
         os.replace(temp_path, out_gz)
     finally:
-        # Cleanup leftover temp file only if replace failed and the file still exists.
-        if temp_path is not None and temp_path.exists():
-            try:
+        # Cleanup leftover temp file. Ignore missing-file races only.
+        if temp_path is not None:
+            with suppress(FileNotFoundError):
                 temp_path.unlink()
-            except Exception:
-                pass
 
     return out_gz.resolve()
 
