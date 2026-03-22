@@ -56,6 +56,8 @@ def pack(
         out_gz = Path(f"{json_path}.gz")
     if not 0 <= compresslevel <= 9:
         raise ValueError("compresslevel must be between 0 and 9")
+    # Ensure destination directory exists so temp/atomic writes work reliably.
+    out_gz.parent.mkdir(parents=True, exist_ok=True)
 
     # Read JSON and validate before doing any compression work
     text = json_path.read_text(encoding='utf-8')
@@ -67,18 +69,27 @@ def pack(
     # Minify into bytes
     packed = json.dumps(obj, separators=(',', ':'), ensure_ascii=False).encode('utf-8')
 
-    # Atomic write: Write to temp file in the same directory, then replace
-    temp_fd, temp_path = tempfile.mkstemp(dir=out_gz.parent, prefix="._tmp_pack_")
-    os.close(temp_fd) 
-    temp_file = Path(temp_path)
-
+    # Atomic write: create a temp filename in destination directory, write gzip to that
+    # filename directly, then replace target file in a single operation.
+    temp_file: Path | None = None
     try:
-        with gzip.GzipFile(temp_file, 'wb', compresslevel=compresslevel, mtime=mtime) as f:
+        temp_fd, temp_name = tempfile.mkstemp(
+            dir=out_gz.parent,
+            prefix="tmp_pack_",
+            suffix=".gz",
+        )
+        os.close(temp_fd)
+        temp_file = Path(temp_name)
+
+        with gzip.GzipFile(filename=temp_file, mode='wb', compresslevel=compresslevel, mtime=mtime) as f:
             f.write(packed)
+
+        if not temp_file.exists():
+            raise RuntimeError(f"Temporary gzip file disappeared before replace: {temp_file}")
         os.replace(temp_file, out_gz)
     finally:
         # Cleanup in case os.replace failed
-        if temp_file.exists():
+        if temp_file is not None and temp_file.exists():
             temp_file.unlink()
 
     return out_gz.resolve()
@@ -172,6 +183,12 @@ def main():
 
     info_parser = subparsers.add_parser('info', help='Print metadata and integrity info for a .json.gz file.')
     info_parser.add_argument('file', type=Path, help='The .json.gz file to inspect.')
+
+    # IDE debug sessions often start scripts without CLI args.
+    # Print help and exit cleanly instead of raising argparse SystemExit(2).
+    if len(sys.argv) == 1:
+        parser.print_help()
+        return 0
 
     args = parser.parse_args()
 
