@@ -17,7 +17,7 @@ def extract_logic(gz_bytes: bytes) -> str:
     return json.dumps(data, indent=2, ensure_ascii=False)
 
 
-def pack_logic(json_str: str, filename: str = "save.json") -> bytes:
+def pack_logic(json_str: str, filename: str = "save.json", mtime: int = 0) -> bytes:
     """Minify JSON text and return gzip-compressed bytes.
 
     The filename is written into the gzip member header so metadata-aware
@@ -28,6 +28,8 @@ def pack_logic(json_str: str, filename: str = "save.json") -> bytes:
     payload = minified_json.encode("utf-8")
 
     with io.BytesIO() as output:
-        with gzip.GzipFile(filename=filename, fileobj=output, mode="wb") as gz_file:
+        with gzip.GzipFile(
+            filename=filename, fileobj=output, mode="wb", mtime=mtime
+        ) as gz_file:
             gz_file.write(payload)
         return output.getvalue()

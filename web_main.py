@@ -29,6 +29,15 @@ def _infer_json_filename(upload_name: str) -> str:
     return "save.json"
 
 
+def _pack_editor_json(json_text: str, upload_name: str = "") -> bytes:
+    """Pack JSON with deterministic gzip metadata for web/base64 export paths."""
+    return pack_logic(
+        json_text,
+        filename=_infer_json_filename(upload_name),
+        mtime=0,
+    )
+
+
 @when("change", "#file-upload")
 async def on_file_selected(event):
     """Load a selected gzip save file, decode it, and place JSON in editor."""
@@ -62,7 +71,7 @@ def on_download_clicked(event):
             return
 
         upload_name = file_input_el.files.item(0).name if file_input_el.files.length else ""
-        packed_bytes = pack_logic(json_text, filename=_infer_json_filename(upload_name))
+        packed_bytes = _pack_editor_json(json_text, upload_name=upload_name)
 
         uint8_data = Uint8Array.new(to_js(memoryview(packed_bytes)))
         blob = Blob.new([uint8_data], to_js({"type": "application/gzip"}))
