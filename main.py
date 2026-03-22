@@ -25,7 +25,7 @@ def _sha256(path: Path) -> str:
 
 
 def _gzip_original_filename(gz_path: Path) -> str | None:
-    """Return the embedded gzip original filename, if present."""
+    """Return the embedded gzip original filename from the first gzip member."""
     with gz_path.open("rb") as f:
         header = f.read(10)
         if len(header) < 10 or header[0:2] != b"\x1f\x8b":
@@ -66,12 +66,16 @@ def _default_extract_path(gz_path: Path, embedded_name: str | None) -> Path:
         return fallback
 
     # Normalize Windows and POSIX separators, then keep basename only.
-    basename = embedded_name.replace('\\', '/').split('/')[-1].strip()
+    basename = embedded_name.replace('\\', '/').split('/')[-1]
 
     # Ignore unusable names (empty/dot entries or control/NUL characters).
     if basename in {"", ".", ".."}:
         return fallback
     if any(ord(ch) < 0x20 or ch == "\x00" for ch in basename):
+        return fallback
+
+    # Keep names cross-platform safe for common Windows/Unix extraction scenarios.
+    if any(ch in set('<>:"/\\|?*') for ch in basename):
         return fallback
 
     try:
