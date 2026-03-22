@@ -28,6 +28,15 @@ def set_status(message: str, is_error: bool = False) -> None:
     status_el.style.color = "#b00020" if is_error else "#1f2937"
 
 
+def _infer_json_filename(upload_name: str) -> str:
+    """Map uploaded filename to a stable JSON name for gzip header metadata."""
+    if upload_name.lower().endswith(".gz"):
+        return f"{upload_name[:-3]}.json"
+    if upload_name.lower().endswith(".gzip"):
+        return f"{upload_name[:-6]}.json"
+    return "save.json"
+
+
 def _trigger_download(filename: str, payload: bytes, mime_type: str) -> None:
     """Download raw bytes to the user's machine without filesystem access."""
     uint8_data = Uint8Array.new(to_js(memoryview(payload)))
@@ -66,6 +75,48 @@ async def on_file_selected(event):
 @when("click", "#b64-to-json-btn")
 def on_base64_to_json_clicked(event):
     """Decode Base64 text and populate the JSON editor."""
+    try:
+        base64_text = base64_el.value or ""
+        editor_el.value = base64_to_json_text(base64_text)
+        set_status("Decoded Base64 into JSON editor.")
+    except Exception as exc:
+        set_status(f"Failed to decode Base64: {exc}", is_error=True)
+
+
+@when("click", "#b64-to-gz-btn")
+def on_base64_to_gz_clicked(event):
+    """Decode Base64 text and download a .json.gz file."""
+    try:
+        gz_bytes = base64_to_gz_bytes(base64_el.value or "")
+        _trigger_download("save.json.gz", gz_bytes, "application/gzip")
+        set_status("Decoded Base64 and downloaded save.json.gz")
+    except Exception as exc:
+        set_status(f"Failed to build gzip from Base64: {exc}", is_error=True)
+
+
+@when("click", "#json-to-b64-btn")
+def on_json_to_base64_clicked(event):
+    """Convert editor JSON to Base64 and place it in the Base64 box."""
+    try:
+        json_text = editor_el.value or ""
+        upload_name = file_input_el.files.item(0).name if file_input_el.files.length else ""
+        base64_el.value = json_text_to_base64(
+            json_text,
+            filename=_infer_json_filename(upload_name),
+            mtime=0,
+        )
+        set_status("Converted JSON editor content to Base64.")
+    except Exception as exc:
+        set_status(f"Failed to convert JSON: {exc}", is_error=True)
+
+
+@when("click", "#download-btn")
+def on_download_clicked(event):
+    """Pack editor JSON as gzip and trigger download."""
+    try:
+        json_text = editor_el.value or ""
+        upload_name = file_input_el.files.item(0).name if file_input_el.files.length else ""
+        gz_bytes = pack_logic(json_text, filename=_infer_json_filename(upload_name), mtime=0)
     try:
         base64_text = base64_el.value or ""
         editor_el.value = base64_to_json_text(base64_text)

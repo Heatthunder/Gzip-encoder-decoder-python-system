@@ -93,6 +93,14 @@ python3 main.py extract file.json.gz -o file.json
 python3 main.py pack file.json -o file.json.gz --level 9 --mtime 0
 ```
 
+### Deterministic gzip output (CLI + Web)
+
+- **CLI**: `pack` supports `--mtime` and defaults to `0`, so repeated packing of
+  the same JSON produces stable gzip timestamps. Passing `--mtime 0` explicitly
+  is recommended for clarity in scripts/CI.
+- **Web (PyScript UI)**: JSON repacking uses deterministic packing with
+  `mtime=0` for JSON→gzip and JSON→Base64 flows.
+
 ### Verify roundtrip integrity
 
 ```bash
@@ -124,7 +132,7 @@ info      Print metadata and integrity info
 ## Tips for game-save workflows
 
 - Always run `backup` before manual save edits.
-- Use `--mtime 0` while packing for reproducible gzip output.
+- Use deterministic packing (`--mtime 0` in CLI; fixed `mtime=0` in web) for reproducible gzip output.
 - `extract` uses the embedded gzip original filename when available, but sanitizes it and falls back to the `.gz`-stripped name when unsafe.
 - Embedded filenames are read from the **first gzip member** only (concatenated multi-member `.gz` files are not fully scanned for naming metadata).
 - Filename rules can vary across filesystems; when embedded metadata is unsafe for the current platform, extraction falls back to the `.gz`-stripped filename.
