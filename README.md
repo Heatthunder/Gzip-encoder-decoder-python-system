@@ -1,4 +1,4 @@
-# Gzip-encoder-decoder-python-system
+# gzip-json-tools
 
 **A lightweight command-line utility for managing gzipped JSON save files.**
 
