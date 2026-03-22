@@ -63,6 +63,21 @@
         min-height: 1.25rem;
         font-size: 0.95rem;
       }
+      #dropzone {
+        border: 2px dashed #94a3b8;
+        border-radius: 10px;
+        padding: 1rem;
+        background: #eef2ff;
+        color: #334155;
+      }
+      #dropzone.is-active {
+        border-color: #2563eb;
+        background: #dbeafe;
+      }
+      #dropzone ul {
+        margin: 0.5rem 0 0;
+        padding-left: 1.2rem;
+      }
     </style>
   </head>
   <body>
@@ -72,6 +87,14 @@
         <input type="file" id="file-upload" accept=".gzip,.gz" />
         <button id="download-btn" type="button">Repack &amp; Download</button>
       </div>
+      <section id="dropzone" aria-label="Dropzone for save files and Base64 text">
+        <strong>Dropzone</strong>
+        <ul>
+          <li>Drop <code>.json.gz</code></li>
+          <li>Drop <code>.json</code></li>
+          <li>Drop/paste Base64 text</li>
+        </ul>
+      </section>
       <textarea
         id="editor"
         placeholder="Load a .gz/.gzip save file to edit JSON here..."
