@@ -50,7 +50,10 @@ def _gzip_original_filename(gz_path: Path) -> str | None:
                     break
                 name_bytes.extend(b)
             if name_bytes:
-                return name_bytes.decode("latin-1")
+                try:
+                    return name_bytes.decode("utf-8")
+                except UnicodeDecodeError:
+                    return name_bytes.decode("latin-1")
 
     return None
 
@@ -65,8 +68,10 @@ def _default_extract_path(gz_path: Path, embedded_name: str | None) -> Path:
     # Normalize Windows and POSIX separators, then keep basename only.
     basename = embedded_name.replace('\\', '/').split('/')[-1].strip()
 
-    # Ignore unusable names (empty or path-like dot entries).
+    # Ignore unusable names (empty/dot entries or control/NUL characters).
     if basename in {"", ".", ".."}:
+        return fallback
+    if any(ord(ch) < 0x20 or ch == "\x00" for ch in basename):
         return fallback
 
     try:
