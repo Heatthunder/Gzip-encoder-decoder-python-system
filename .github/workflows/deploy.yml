@@ -1,17 +1,7 @@
 name: Deploy PyScript App to GitHub Pages
-run-name: Deploy site from ${{ github.ref_name }}
+run-name: Manual deploy from ${{ github.ref_name }}
 
-"on":
-  push:
-    branches:
-      - main
-    # Only trigger deployments when site/deployment files change.
-    paths:
-      - ".github/workflows/deploy.yml"
-      - "index.html"
-      - "web_main.py"
-      - "core_logic.py"
-      - "conf.json"
+on:
   workflow_dispatch:
 
 permissions:
