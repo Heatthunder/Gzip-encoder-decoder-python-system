@@ -1,8 +1,7 @@
 name: Deploy PyScript App to GitHub Pages
+run-name: Manual deploy from ${{ github.ref_name }}
 
 on:
-  push:
-    branches: ["main"] # Ensure this matches your default branch name
   workflow_dispatch:
 
 permissions:
@@ -11,24 +10,32 @@ permissions:
   id-token: write
 
 concurrency:
-  group: "pages"
+  group: pages
   cancel-in-progress: false
 
 jobs:
   deploy:
+    # Prevent manual deploys from non-main branches.
+    if: github.ref == 'refs/heads/main'
+    name: Deploy to GitHub Pages
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
     steps:
-      - name: Checkout Code
+      - name: Checkout code
         uses: actions/checkout@v4
-      - name: Setup Pages
+
+      - name: Configure GitHub Pages
         uses: actions/configure-pages@v4
-      - name: Upload Artifact
+
+      - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: '.' # Deploys the root directory containing your index.html
+          # Deploy the project root, which contains index.html.
+          path: .
+
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
