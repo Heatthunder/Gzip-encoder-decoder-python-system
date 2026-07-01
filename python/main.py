@@ -211,6 +211,20 @@ def pack(
     # Minify into bytes
     packed = json.dumps(obj, separators=(',', ':')).encode()
 
+    # Compress via gzip.compress rather than gzip.GzipFile. When mtime=0,
+    # gzip.compress takes a zlib fast path (zlib.compress(data, wbits=31))
+    # that writes OS=0x03 (Unix) in the header, whereas GzipFile always
+    # writes OS=0xff (unknown). Both decompress identically, but only
+    # gzip.compress(mtime=0) matches the bytes actually produced by
+    # save.py / global_save.py / core_logic.py — all three call gzip.compress
+    # directly. Using GzipFile here silently produced non-matching gzip
+    # bytes for identical JSON content, which could confuse byte-level
+    # integrity/parity checks even though every file loads fine.
+    # NOTE: this fast path only applies when mtime=0. Non-zero --mtime values
+    # fall back to gzip.compress's manual-header path, which does not use the
+    # zlib shortcut and is unaffected by this OS-byte quirk.
+    gz_bytes = gzip.compress(packed, compresslevel=compresslevel, mtime=mtime)
+
     # Atomic write: create a temp filename in destination directory, write gzip to that
     # filename directly, then replace target file in a single operation.
     # Use mkstemp to get a stable filename on disk (works reliably on Windows).
@@ -220,17 +234,10 @@ def pack(
         os.close(fd)
         temp_path = Path(name)
 
-        # Open the raw file and write gzip data through it so we can flush+fsync the raw fd.
-        # Passing a raw file object as fileobj avoids handle/locking issues on Windows.
+        # Open the raw file and write gzip bytes through it so we can flush+fsync the raw fd.
+        # Passing a raw file object avoids handle/locking issues on Windows.
         with open(name, "wb") as raw:
-            with gzip.GzipFile(
-                fileobj=raw,
-                mode="wb",
-                filename="",
-                compresslevel=compresslevel,
-                mtime=mtime,
-            ) as gz:
-                gz.write(packed)
+            raw.write(gz_bytes)
             # Ensure all data is flushed to disk before replacing the target file.
             raw.flush()
             os.fsync(raw.fileno())
