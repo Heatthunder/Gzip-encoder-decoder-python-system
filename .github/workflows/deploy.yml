@@ -1,4 +1,4 @@
-name: Deploy PyScript App to GitHub Pages
+name: Deploy Web App to GitHub Pages
 run-name: Manual deploy from ${{ github.ref_name }}
 
 on:
